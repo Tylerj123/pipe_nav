@@ -42,6 +42,9 @@ void pose_cb(const geometry_msgs::PoseStamped::ConstPtr& msg) {
 }
 
 void marker_cb(const ml_msgs::MarkerDetection::ConstPtr& msg) {
+
+	ROS_INFO("Detected Marker");
+
     for (int i = 0; i < msg->markers.size(); i++) {
 		if (marker_id_current == -1) {
 			bool new_marker = true;
@@ -121,20 +124,21 @@ int main(int argc, char **argv) {
 	bool sample_inprogress = false;
 	ros::Time sample_begin_time;
 
-
+	ROS_INFO("Setup Completed Waiting for FCU");
 	//==-- Wait for FCU
     while(ros::ok() && !current_state.connected) {
         ros::spinOnce();
         rate.sleep();
     }
 
-
+	ROS_INFO("FCU Connected - Searching for Target");
 	//==-- Main Loop
     while( ros::ok() ){
 		switch( nav_mode ) {
 			case NAV_MODE_SEARCH: {
 				if( marker_id_current != -1 ) {
-					if( current_state.mode != "OFFBOARD" ) {
+					ROS_INFO("Pausing search, taking control");
+					if( current_state.mode == "MISSION" ) {
 						if( set_mode_client.call(set_mode_offb) &&
 							set_mode_offb.response.success) {
 
