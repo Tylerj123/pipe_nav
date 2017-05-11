@@ -40,6 +40,7 @@ class sonar_range():
 				self.ser.flushOutput()#flush output buffer, aborting current output
 
 				msg_out = Range()
+				msg_out.header.frame_id = "sonar"
 				msg_out.radiation_type = 0 #ultrasound
 				msg_out.field_of_view = 0.0
 				msg_out.min_range = 0.05
@@ -47,6 +48,7 @@ class sonar_range():
 
 				while True:
 					msg_out.range = int(self.ser.readline()) / 100.0
+					msg_out.header.stamp = rospy.Time.now()
 					self.sonar_pub.publish(msg_out)
 
 				self.ser.close()
