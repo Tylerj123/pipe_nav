@@ -1,2 +1,2 @@
-# pipe_nav
+# quapt
 Navigation node for UAV with ArUco target detection
