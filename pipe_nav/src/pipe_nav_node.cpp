@@ -48,12 +48,9 @@ void pose_cb(const geometry_msgs::PoseStamped::ConstPtr& msg) {
 }
 
 void marker_cb(const ml_msgs::MarkerDetection::ConstPtr& msg) {
-
-	ROS_INFO("Detected Marker");
-
     for (int i = 0; i < msg->markers.size(); i++) {
 		if (marker_id_current == -1) {
-			ROS_INFO("Looking for new marker");
+			//ROS_INFO("Looking for new marker");
 			bool new_marker = true;
 			for (int j = 0; j < marker_ids_found.size(); j++) {
 				if(marker_ids_found.at(j) == msg->markers.at(i).marker_id) {
@@ -68,7 +65,7 @@ void marker_cb(const ml_msgs::MarkerDetection::ConstPtr& msg) {
 		}
 
 		if (marker_id_current == msg->markers.at(i).marker_id) {
-			ROS_INFO("Updating target");
+			//ROS_INFO("Updating target");
 			marker_current.header = msg->header;
 			marker_current.pose = msg->markers.at(i).pose;
 		}
@@ -115,7 +112,6 @@ int main(int argc, char **argv) {
     ros::Rate rate(20.0);	//The setpoint publishing rate MUST be faster than 2Hz
 
 	nav_mode_t nav_mode = NAV_MODE_SEARCH;
-	ROS_ERROR("TEST!");
 
 	mavros_msgs::SetMode set_mode_offb;
     set_mode_offb.request.custom_mode = "OFFBOARD";
@@ -137,7 +133,7 @@ int main(int argc, char **argv) {
 
 	bool sample_inprogress = false;
 	ros::Time sample_begin_time;
-
+	pose_out.header.frame_id = "world";
 	ROS_WARN("Setup Completed Waiting for FCU");
 	//==-- Wait for FCU
     while(ros::ok() && !current_state.connected) {
@@ -145,13 +141,14 @@ int main(int argc, char **argv) {
         rate.sleep();
     }
 
+
 	ROS_INFO("FCU Connected - Searching for Target");
 	//==-- Main Loop
     while( ros::ok() ){
 		if( marker_id_current != -1 ) {
 			try{
 
-				ROS_INFO("Estimating Target Position");
+				//ROS_INFO("Estimating Target Position");
 
 				geometry_msgs::TransformStamped tmp_marker;
 				tmp_marker.header.stamp = ros::Time::now();
@@ -189,7 +186,7 @@ int main(int argc, char **argv) {
 		switch( nav_mode ) {
 			case NAV_MODE_SEARCH: {
 				if( marker_id_current != -1 ) {
-					ROS_INFO("Pausing search, taking control");
+					ROS_INFO_THROTTLE(2.0, "Pausing search, taking control");
 					if( current_state.mode == "MISSION" ) {
 						if( set_mode_client.call(set_mode_offb) &&
 							set_mode_offb.response.success) {
@@ -265,7 +262,6 @@ int main(int argc, char **argv) {
 			}
 		}
 
-		pose_out.header.frame_id = pose_current.header.frame_id;
 		pose_out.header.stamp = ros::Time::now();
 		pose_out.pose = pose_goal;
 
