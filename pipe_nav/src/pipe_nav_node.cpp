@@ -7,7 +7,11 @@
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/State.h>
 #include <ml_msgs/MarkerDetection.h>
-
+#include <tf2_ros/transform_listener.h>
+#include <tf2/LinearMath/Vector3.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Transform.h>
+#include <tf2_ros/transform_broadcaster.h>
 
 //==-- Global Variables
 typedef enum {
@@ -18,6 +22,8 @@ typedef enum {
 	NAV_MODE_ERROR,
 	NAV_MODE_NUM
 } nav_mode_t;
+
+tf2_ros::Buffer tfBuffer;
 
 mavros_msgs::State current_state;
 geometry_msgs::PoseStamped pose_current;
@@ -47,6 +53,7 @@ void marker_cb(const ml_msgs::MarkerDetection::ConstPtr& msg) {
 
     for (int i = 0; i < msg->markers.size(); i++) {
 		if (marker_id_current == -1) {
+			ROS_INFO("Looking for new marker");
 			bool new_marker = true;
 			for (int j = 0; j < marker_ids_found.size(); j++) {
 				if(marker_ids_found.at(j) == msg->markers.at(i).marker_id) {
@@ -56,10 +63,12 @@ void marker_cb(const ml_msgs::MarkerDetection::ConstPtr& msg) {
 
 			if (new_marker) {
 				marker_id_current = msg->markers.at(i).marker_id;
+				ROS_INFO("Set new target (id: %i)", marker_id_current);
 			}
 		}
 
 		if (marker_id_current == msg->markers.at(i).marker_id) {
+			ROS_INFO("Updating target");
 			marker_current.header = msg->header;
 			marker_current.pose = msg->markers.at(i).pose;
 		}
@@ -67,6 +76,7 @@ void marker_cb(const ml_msgs::MarkerDetection::ConstPtr& msg) {
 
 }
 
+// Determines if the position of the UAV has reached the goal position
 bool waypoint_reached() {
 
 	float x = pose_goal.position.x - pose_current.pose.position.x;
@@ -105,6 +115,7 @@ int main(int argc, char **argv) {
     ros::Rate rate(20.0);	//The setpoint publishing rate MUST be faster than 2Hz
 
 	nav_mode_t nav_mode = NAV_MODE_SEARCH;
+	ROS_ERROR("TEST!");
 
 	mavros_msgs::SetMode set_mode_offb;
     set_mode_offb.request.custom_mode = "OFFBOARD";
@@ -112,6 +123,9 @@ int main(int argc, char **argv) {
     set_mode_mission.request.custom_mode = "MISSION";
     mavros_msgs::SetMode set_mode_failsafe;
     set_mode_failsafe.request.custom_mode = "FAILSAFE";
+
+	tf2_ros::TransformListener tfListener(tfBuffer);
+	tf2_ros::TransformBroadcaster tfbr;
 
     pose_goal.position.x = 0;
     pose_goal.position.y = 0;
@@ -124,7 +138,7 @@ int main(int argc, char **argv) {
 	bool sample_inprogress = false;
 	ros::Time sample_begin_time;
 
-	ROS_INFO("Setup Completed Waiting for FCU");
+	ROS_WARN("Setup Completed Waiting for FCU");
 	//==-- Wait for FCU
     while(ros::ok() && !current_state.connected) {
         ros::spinOnce();
@@ -134,6 +148,44 @@ int main(int argc, char **argv) {
 	ROS_INFO("FCU Connected - Searching for Target");
 	//==-- Main Loop
     while( ros::ok() ){
+		if( marker_id_current != -1 ) {
+			try{
+
+				ROS_INFO("Estimating Target Position");
+
+				geometry_msgs::TransformStamped tmp_marker;
+				tmp_marker.header.stamp = ros::Time::now();
+				tmp_marker.header.frame_id = "camera";
+				tmp_marker.child_frame_id = "target_marker";
+				tmp_marker.transform.translation.x = marker_current.pose.position.x;
+				tmp_marker.transform.translation.y = marker_current.pose.position.y;
+				tmp_marker.transform.translation.z = marker_current.pose.position.z;
+				tmp_marker.transform.rotation.w = marker_current.pose.orientation.w;
+				tmp_marker.transform.rotation.x = marker_current.pose.orientation.x;
+				tmp_marker.transform.rotation.y = marker_current.pose.orientation.y;
+				tmp_marker.transform.rotation.z = marker_current.pose.orientation.z;
+				tfBuffer.setTransform(tmp_marker, "nav_node_temp");
+
+				geometry_msgs::TransformStamped marker_world = tfBuffer.lookupTransform("target_marker", "world",tmp_marker.header.stamp);
+
+				//Broadcast Maker Tranform
+				tfbr.sendTransform(tmp_marker);
+
+				pose_goal.position.x = marker_world.transform.translation.x;
+				pose_goal.position.y = marker_world.transform.translation.y;
+				pose_goal.position.z = marker_world.transform.translation.z + 1; //XXX Hover Height added
+				pose_goal.orientation.w = marker_world.transform.rotation.w;
+				pose_goal.orientation.x = marker_world.transform.rotation.x;
+				pose_goal.orientation.y = marker_world.transform.rotation.y;
+				pose_goal.orientation.z = marker_world.transform.rotation.z;
+
+			}
+			catch (tf2::TransformException &ex) {
+			  ROS_WARN("%s",ex.what());
+				continue;
+			}
+		}
+
 		switch( nav_mode ) {
 			case NAV_MODE_SEARCH: {
 				if( marker_id_current != -1 ) {
@@ -189,7 +241,7 @@ int main(int argc, char **argv) {
 						nav_mode = NAV_MODE_ERROR;
 					}
 
-// Marking targets sampled
+					// Marking targets sampled
 					marker_ids_found.push_back(marker_id_current);
 					marker_id_current = -1;
 					sample_inprogress = false;
