@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
 	mavros_msgs::SetMode set_mode_offb;
     set_mode_offb.request.custom_mode = "OFFBOARD";
     mavros_msgs::SetMode set_mode_mission;
-    set_mode_mission.request.custom_mode = "MISSION";
+    set_mode_mission.request.custom_mode = "AUTO.MISSION";
     mavros_msgs::SetMode set_mode_failsafe;
     set_mode_failsafe.request.custom_mode = "FAILSAFE";
 
@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
 				tmp_marker.transform.rotation.z = marker_current.pose.orientation.z;
 				tfBuffer.setTransform(tmp_marker, "nav_node_temp");
 
-				geometry_msgs::TransformStamped marker_world = tfBuffer.lookupTransform("target_marker", "world",tmp_marker.header.stamp);
+				geometry_msgs::TransformStamped marker_world = tfBuffer.lookupTransform("target_marker", "world", tmp_marker.header.stamp, ros::Duration(0.1));
 
 				//Broadcast Maker Tranform
 				tfbr.sendTransform(tmp_marker);
@@ -187,7 +187,7 @@ int main(int argc, char **argv) {
 			case NAV_MODE_SEARCH: {
 				if( marker_id_current != -1 ) {
 					ROS_INFO_THROTTLE(2.0, "Pausing search, taking control");
-					if( current_state.mode == "MISSION" ) {
+					if( current_state.mode == "AUTO.MISSION" ) {
 						if( set_mode_client.call(set_mode_offb) &&
 							set_mode_offb.response.success) {
 
